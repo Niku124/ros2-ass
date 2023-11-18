@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 import rclpy
 import numpy as np
-import time
-import tf_transformations
+import math
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
 from nav2_simple_commander.robot_navigator import BasicNavigator
 from geometry_msgs.msg import PoseStamped
-from tf_transformations import quaternion_from_euler
+from nav2_msgs.action import NavigateToPose
+
+
+
 
 
 
@@ -18,80 +21,123 @@ class MazeSolverNode(Node):
         self.subscription = self.create_subscription(LaserScan, 'scan', self.laser_callback, 10)
         self.publisher_Twist = self.create_publisher(Twist, 'cmd_vel', 10)
         self.publisher_Pose = self.create_publisher(PoseStamped, 'move_base_simple/goal', 10)
+        self.odom_subscription = self.create_subscription(Odometry, 'odom', self.odom_callback, 10)
         self.nav = BasicNavigator()
-        self.sections = None
+        self.current_pose = None
+        self.avg_front = 0
+        self.avg_back = 0
+        self.avg_left = 0
+        self.avg_right = 0
+        self.current_x = 0
+        self.current_y = 0
+        self.current_z = 0
+        self.current_orient_x = 0
+        self.current_orient_y = 0
+        self.current_orient_z = 0
+        self.current_orient_w = 0
+        self.set_axis = True
+
+
+
+    def odom_callback(self, msg):
+        self.current_x = msg.pose.pose.position.x
+        self.current_y = msg.pose.pose.position.y
+        self.current_z = msg.pose.pose.position.z
+        self.current_orient_x = msg.pose.pose.orientation.x
+        self.current_orient_y = msg.pose.pose.orientation.y
+        self.current_orient_z = msg.pose.pose.orientation.z
+        self.current_orient_w = msg.pose.pose.orientation.w
 
 
     def laser_callback(self, msg):
-        # Get the laser scan data
         ranges = msg.ranges
-        # Calculate the number of ranges
         num_ranges = len(ranges)
-
-        # Split the ranges into twelve sections
         section = num_ranges // 12
         sections = [ranges[i * section:(i + 1) * section] for i in range(12)]
+        # for i in range(12):
+        #     print(f"Section {12-i}: ", np.mean(sections[i]))
 
-        # For example, print the average distance in each section
-        for i in range(12):
-            print(f"Section {12-i}: ", np.mean(sections[i]))
-        # twist_msg = self.calculate_movement(sections)
-        # self.publisher.publish(twist_msg)
-
-        self.sections = sections
-        # self.calculate_movement(sections,self.nav)
+        self.avg_right = np.mean(sections[8] + sections[9] + sections[10])
+        self.avg_left = np.mean(sections[2] + sections[3] + sections[4])
+        self.avg_front = np.mean(sections[0] + sections[1] + sections[11])
+        self.avg_back = np.mean(sections[5] + sections[6] + sections[7])
 
 
 
-    def calculate_movement(self, sections,navigator: BasicNavigator):
 
-        # Replace 'inf' values with a large number
-        sections = [[distance if distance != float('inf') else 1e10 for distance in section] for section in sections]
+    def navigate(self):
+        goal = PoseStamped()
+        goal.header.frame_id = 'map'  # Adjust the frame_id based on your robot's configuration
+        goal.header.stamp = self.nav.get_clock().now().to_msg()
 
-        # Find the index of the section with the maximum average distance
-        max_index = np.argmax([np.mean(section) for section in sections])
 
-        # Calculate the angle
-        angle = max_index * 2 * np.pi / 12
+        # print("Right side: ", self.avg_right)
+        # print("Left side: ", self.avg_left)
+        # print("Back side: ", self.avg_back)
+        # print("Front side: ", self.avg_front)
+        # print("Current x: ", self.current_x)
+        # print("Current y: ", self.current_y)
+        # print("Current z: ", self.current_z)
+        # print("Current orient x: ", self.current_orient_x)
+        # print("Current orient y: ", self.current_orient_y)
+        # print("Current orient z: ", self.current_orient_z)
+        # print("Current orient w: ", self.current_orient_w)
 
-        # Create a PoseStamped message
-        pose = PoseStamped()
-        pose.header.stamp = navigator.get_clock().now().to_msg()
-        pose.header.frame_id = 'map'
-        q = quaternion_from_euler(0, 0, angle)
-        pose.pose.orientation.x = q[0]
-        pose.pose.orientation.y = q[1]
-        pose.pose.orientation.z = q[2]
-        pose.pose.orientation.w = q[3]
+        if self.avg_front < 0.7:
+                goal.pose.position.x = float(self.current_x)
+                print("Current orient z: ", self.current_orient_z)
+                print("Current orient w: ", self.current_orient_w)
 
-        # Publish the PoseStamped message
-        self.publisher_Pose.publish(pose)
+                goal.pose.orientation.z = (self.current_orient_z + 0.5)
+                goal.pose.orientation.w = (self.current_orient_w - 0.2)
 
-        # Use the navigator to go to the pose
-        navigator.goToPose(pose)
-        
-        if navigator.isTaskComplete():
-            print("Task complete")
-            self.calculate_movement_flag = False                    
-        
-            
+                self.nav.goToPose(goal)     
+                print(goal.pose.orientation.z)
+                print(goal.pose.orientation.w)
+                print("Turning Left")
+                if self.set_axis == True:
+                    self.set_axis = False
+                else:
+                    self.set_axis = True
+
+
+        elif (self.avg_left >0.8 and self.avg_front >1) or (self.avg_right >0.8 and self.avg_front > 0.8) :
+                
+                print("Current x: ", self.current_x)
+                print("Current y: ", self.current_y)
+                if self.set_axis == True:
+                    goal.pose.position.x = (self.current_x + 0.5)
+                    goal.pose.position.y = (self.current_y + 0.0)
+                    print(goal.pose.position.x)
+                    print(goal.pose.position.y)
+                    self.nav.goToPose(goal)     
+                    print("Going straight")
+
+
+                else:
+                    goal.pose.position.x = self.current_x + 0.0
+                    goal.pose.position.y = (self.current_y + 0.5)
+                    print(goal.pose.position.x)
+                    print(goal.pose.position.y)
+                    self.nav.goToPose(goal)     
+                    print("Going straight")
+                    self.goal_reached = False
+                    goal_msg = NavigateToPose.Goal()
+                    goal_msg.pose = goal
+
+                     
+
+    
+
 
             
 
 def main(args=None):
     rclpy.init(args=args)
     maze_solver_node = MazeSolverNode()
-    #rclpy.spin(maze_solver_node)
-
-    while rclpy.ok():
-
-        # Calculate and execute the movement
-        maze_solver_node.calculate_movement(maze_solver_node.sections, maze_solver_node.nav)
-        # Wait for a short period of time before the next iteration
-        rclpy.spin_once(maze_solver_node)
-
-
-
+    maze_solver_node.create_timer(1.0,maze_solver_node.navigate)
+    rclpy.spin(maze_solver_node)
+    
     
     maze_solver_node.destroy_node()
     rclpy.shutdown()
