@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 import rclpy
 import numpy as np
-import math
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from nav2_simple_commander.robot_navigator import BasicNavigator
+from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from geometry_msgs.msg import PoseStamped
 from nav2_msgs.action import NavigateToPose
 
@@ -22,6 +21,7 @@ class MazeSolverNode(Node):
         self.publisher_Twist = self.create_publisher(Twist, 'cmd_vel', 10)
         self.publisher_Pose = self.create_publisher(PoseStamped, 'move_base_simple/goal', 10)
         self.odom_subscription = self.create_subscription(Odometry, 'odom', self.odom_callback, 10)
+
         self.nav = BasicNavigator()
         self.current_pose = None
         self.avg_front = 0
@@ -61,15 +61,12 @@ class MazeSolverNode(Node):
         self.avg_left = np.mean(sections[2] + sections[3] + sections[4])
         self.avg_front = np.mean(sections[0] + sections[1] + sections[11])
         self.avg_back = np.mean(sections[5] + sections[6] + sections[7])
-
-
-
+        
 
     def navigate(self):
         goal = PoseStamped()
         goal.header.frame_id = 'map'  # Adjust the frame_id based on your robot's configuration
         goal.header.stamp = self.nav.get_clock().now().to_msg()
-
 
         # print("Right side: ", self.avg_right)
         # print("Left side: ", self.avg_left)
@@ -124,6 +121,18 @@ class MazeSolverNode(Node):
                     self.goal_reached = False
                     goal_msg = NavigateToPose.Goal()
                     goal_msg.pose = goal
+
+        while not self.nav.isTaskComplete():
+            
+            result = self.nav.getResult()
+            if result == TaskResult.SUCCEEDED:
+                print('Goal succeeded!')
+            elif result == TaskResult.CANCELED:
+                print('Goal was canceled!')
+            elif result == TaskResult.FAILED:
+                print('Goal failed!')
+            else:
+                print('Goal has an invalid return status!')
 
                      
 
