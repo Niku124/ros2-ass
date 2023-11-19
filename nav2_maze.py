@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 import rclpy
 import numpy as np
+import math
+import time
+import tf_transformations
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
@@ -8,6 +11,7 @@ from nav_msgs.msg import Odometry
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 from geometry_msgs.msg import PoseStamped
 from nav2_msgs.action import NavigateToPose
+from action_msgs.msg import GoalStatus
 
 
 
@@ -17,10 +21,11 @@ from nav2_msgs.action import NavigateToPose
 class MazeSolverNode(Node):
     def __init__(self):
         super().__init__('maze_solver_node')
+        self.odom_subscription = self.create_subscription(Odometry, 'odom', self.odom_callback, 10)
         self.subscription = self.create_subscription(LaserScan, 'scan', self.laser_callback, 10)
         self.publisher_Twist = self.create_publisher(Twist, 'cmd_vel', 10)
         self.publisher_Pose = self.create_publisher(PoseStamped, 'move_base_simple/goal', 10)
-        self.odom_subscription = self.create_subscription(Odometry, 'odom', self.odom_callback, 10)
+        
 
         self.nav = BasicNavigator()
         self.current_pose = None
@@ -75,64 +80,56 @@ class MazeSolverNode(Node):
         # print("Current x: ", self.current_x)
         # print("Current y: ", self.current_y)
         # print("Current z: ", self.current_z)
-        # print("Current orient x: ", self.current_orient_x)
-        # print("Current orient y: ", self.current_orient_y)
-        # print("Current orient z: ", self.current_orient_z)
-        # print("Current orient w: ", self.current_orient_w)
+        print("Current orient x: ", self.current_orient_x)
+        print("Current orient y: ", self.current_orient_y)
+        print("Current orient z: ", self.current_orient_z)
+        print("Current orient w: ", self.current_orient_w)
 
-        if self.avg_front < 0.7:
-                goal.pose.position.x = float(self.current_x)
-                print("Current orient z: ", self.current_orient_z)
-                print("Current orient w: ", self.current_orient_w)
 
-                goal.pose.orientation.z = (self.current_orient_z + 0.5)
-                goal.pose.orientation.w = (self.current_orient_w - 0.2)
+        if self.avg_front < 0.7 and self.nav.isTaskComplete() == True:
+                
+                rotation_matrix = tf_transformations.quaternion_matrix([self.current_orient_x, self.current_orient_y, self.current_orient_z, self.current_orient_w])
+                turn_angle = math.radians(95)
+                turn_matrix = tf_transformations.rotation_matrix(turn_angle, [0, 0, 1])
+                new_rotation_matrix = np.dot(turn_matrix, rotation_matrix)
+                new_quaternion = tf_transformations.quaternion_from_matrix(new_rotation_matrix)
 
+
+                goal.pose.position.x = self.current_x
+                goal.pose.position.y = self.current_y
+                goal.pose.position.z = self.current_z
+                goal.pose.orientation.z = new_quaternion[2]
+                goal.pose.orientation.w = new_quaternion[3]
+                print(new_quaternion[2])
+                print(new_quaternion[3])
                 self.nav.goToPose(goal)     
-                print(goal.pose.orientation.z)
-                print(goal.pose.orientation.w)
-                print("Turning Left")
+
                 if self.set_axis == True:
                     self.set_axis = False
                 else:
                     self.set_axis = True
 
-
-        elif (self.avg_left >0.8 and self.avg_front >1) or (self.avg_right >0.8 and self.avg_front > 0.8) :
                 
-                print("Current x: ", self.current_x)
-                print("Current y: ", self.current_y)
+
+
+        elif ((self.avg_left >0.7 or self.avg_right >0.7) and self.nav.isTaskComplete() == True) :
+
                 if self.set_axis == True:
                     goal.pose.position.x = (self.current_x + 0.5)
-                    goal.pose.position.y = (self.current_y + 0.0)
-                    print(goal.pose.position.x)
-                    print(goal.pose.position.y)
-                    self.nav.goToPose(goal)     
-                    print("Going straight")
-
-
-                else:
-                    goal.pose.position.x = self.current_x + 0.0
-                    goal.pose.position.y = (self.current_y + 0.5)
-                    print(goal.pose.position.x)
-                    print(goal.pose.position.y)
                     self.nav.goToPose(goal)     
                     print("Going straight")
                     self.goal_reached = False
                     goal_msg = NavigateToPose.Goal()
                     goal_msg.pose = goal
 
-        while not self.nav.isTaskComplete():
-            
-            result = self.nav.getResult()
-            if result == TaskResult.SUCCEEDED:
-                print('Goal succeeded!')
-            elif result == TaskResult.CANCELED:
-                print('Goal was canceled!')
-            elif result == TaskResult.FAILED:
-                print('Goal failed!')
-            else:
-                print('Goal has an invalid return status!')
+
+                else:
+                    goal.pose.position.y = (self.current_y + 0.5)
+                    self.nav.goToPose(goal)     
+                    print("Going straight")
+                    self.goal_reached = False
+                    goal_msg = NavigateToPose.Goal()
+                    goal_msg.pose = goal
 
                      
 
