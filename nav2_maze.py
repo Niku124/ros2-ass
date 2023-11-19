@@ -40,7 +40,7 @@ class MazeSolverNode(Node):
         self.current_orient_y = 0
         self.current_orient_z = 0
         self.current_orient_w = 0
-        self.set_axis = True
+
 
 
 
@@ -62,78 +62,77 @@ class MazeSolverNode(Node):
         # for i in range(12):
         #     print(f"Section {12-i}: ", np.mean(sections[i]))
 
-        self.avg_right = np.mean(sections[8] + sections[9] + sections[10])
-        self.avg_left = np.mean(sections[2] + sections[3] + sections[4])
-        self.avg_front = np.mean(sections[0] + sections[1] + sections[11])
-        self.avg_back = np.mean(sections[5] + sections[6] + sections[7])
+        self.avg_right = np.mean(sections[9])
+        self.avg_left = np.mean(sections[3])
+        self.avg_front = np.mean(sections[0])
+        self.avg_back = np.mean(sections[6])
         
 
+
+    def rotate(self, angle):
+        rotation_matrix = tf_transformations.quaternion_matrix([self.current_orient_x, self.current_orient_y, self.current_orient_z, self.current_orient_w])
+        turn_angle = math.radians(angle)
+        turn_matrix = tf_transformations.rotation_matrix(turn_angle, [0, 0, 1])
+        new_rotation_matrix = np.dot(turn_matrix, rotation_matrix)
+        new_quaternion = tf_transformations.quaternion_from_matrix(new_rotation_matrix)
+        return new_quaternion
+
+    def publish_twist(self, linear_x, angular_z):
+        twist = Twist()
+        twist.linear.x = linear_x
+        twist.angular.z = angular_z
+        self.publisher_Twist.publish(twist)
+
+
     def navigate(self):
+
         goal = PoseStamped()
-        goal.header.frame_id = 'map'  # Adjust the frame_id based on your robot's configuration
+        goal.header.frame_id = 'map'
         goal.header.stamp = self.nav.get_clock().now().to_msg()
 
-        # print("Right side: ", self.avg_right)
-        # print("Left side: ", self.avg_left)
-        # print("Back side: ", self.avg_back)
-        # print("Front side: ", self.avg_front)
-        # print("Current x: ", self.current_x)
-        # print("Current y: ", self.current_y)
-        # print("Current z: ", self.current_z)
-        print("Current orient x: ", self.current_orient_x)
-        print("Current orient y: ", self.current_orient_y)
-        print("Current orient z: ", self.current_orient_z)
-        print("Current orient w: ", self.current_orient_w)
+        print("Front:",self.avg_front, "Back:",self.avg_back, "Left:",self.avg_left, "Right:",self.avg_right)
+        #Checks if there's a wall to the left
+        if self.avg_left < 0.6 and self.nav.isTaskComplete():
 
+            #Checks if infront has anything
+            if self.avg_front > 0.5:
+                self.publish_twist(0.1,0.0)
+                print("Moving forward")
 
-        if self.avg_front < 0.7 and self.nav.isTaskComplete() == True:
-                
-                rotation_matrix = tf_transformations.quaternion_matrix([self.current_orient_x, self.current_orient_y, self.current_orient_z, self.current_orient_w])
-                turn_angle = math.radians(95)
-                turn_matrix = tf_transformations.rotation_matrix(turn_angle, [0, 0, 1])
-                new_rotation_matrix = np.dot(turn_matrix, rotation_matrix)
-                new_quaternion = tf_transformations.quaternion_from_matrix(new_rotation_matrix)
-
-
+            elif self.avg_front < 0.5 and self.nav.isTaskComplete():
+                new_quaternion = self.rotate(-100)
+                goal.pose.orientation.z = new_quaternion[2]
+                goal.pose.orientation.w = new_quaternion[3]
                 goal.pose.position.x = self.current_x
                 goal.pose.position.y = self.current_y
                 goal.pose.position.z = self.current_z
+                self.nav.goToPose(goal)     
+                print("Turning Right")
+
+
+        elif self.avg_left > 0.6 and self.nav.isTaskComplete():
+                
+                new_quaternion = self.rotate(95)
                 goal.pose.orientation.z = new_quaternion[2]
                 goal.pose.orientation.w = new_quaternion[3]
-                print(new_quaternion[2])
-                print(new_quaternion[3])
+                goal.pose.position.x = self.current_x
+                goal.pose.position.y = self.current_y
+                goal.pose.position.z = self.current_z
                 self.nav.goToPose(goal)     
+                print("Turning left")
 
-                if self.set_axis == True:
-                    self.set_axis = False
-                else:
-                    self.set_axis = True
-
-                
+                if self.nav.isTaskComplete():
+                    self.publish_twist(0.1,0.0)
+                    print("Moving forward after turning left")
 
 
-        elif ((self.avg_left >0.7 or self.avg_right >0.7) and self.nav.isTaskComplete() == True) :
-
-                if self.set_axis == True:
-                    goal.pose.position.x = (self.current_x + 0.5)
-                    self.nav.goToPose(goal)     
-                    print("Going straight")
-                    self.goal_reached = False
-                    goal_msg = NavigateToPose.Goal()
-                    goal_msg.pose = goal
+        
+        if self.avg_front <0.5:
+            self.publish_twist(0.0,0.0)
+            print("Stopped")
+            
 
 
-                else:
-                    goal.pose.position.y = (self.current_y + 0.5)
-                    self.nav.goToPose(goal)     
-                    print("Going straight")
-                    self.goal_reached = False
-                    goal_msg = NavigateToPose.Goal()
-                    goal_msg.pose = goal
-
-                     
-
-    
 
 
             
