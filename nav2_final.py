@@ -52,9 +52,7 @@ class MazeSolverNode(Node):
         self.current_orient_w = 0
         self.left_turn = 0
         self.right_turn = 0
-        self.left_turn_counter = 0
-
-
+        self.move_forward = 0
 
     def odom_callback(self, msg):
         self.current_x = msg.pose.pose.position.x
@@ -82,28 +80,37 @@ class MazeSolverNode(Node):
         self.right = np.mean(sections[8] + sections[9] + sections[10])
         self.left = np.mean(sections[2] + sections[3] + sections[4])
         self.front = np.mean(sections[0] + sections[1] + sections[11])
-
-
-
-    def rotate(self, angular_speed, time_needed=None):
+        # print("Front : ", self.front)
+        # print("Left : ", self.left)
+        # print("Right : ", self.right)
         
-        if time_needed is None:  # if time_needed is not provided, calculate it for a 90 degree turn
-            angle = math.pi / 2  # 90 degrees in radians
-            time_needed = (angle / abs(angular_speed*2))
 
-        twist = Twist()
-        twist.linear.x = 0.0
-        twist.linear.y = 0.0
-        twist.linear.z = 0.0
-        twist.angular.x = 0.0
-        twist.angular.y = 0.0
-        twist.angular.z = angular_speed
-        self.publisher_Twist.publish(twist)
-        time.sleep(time_needed)
-        # stop rotation
-        twist.angular.z = 0.0
-        self.publisher_Twist.publish(twist)
-        print("Rotated 90 degrees")
+
+
+    # Rotate function using Twist
+
+    # def rotate(self, angular_speed, time_needed=None):
+        
+    #     if time_needed is None:  # if time_needed is not provided, calculate it for a 90 degree turn
+    #         angle = math.pi / 2  # 90 degrees in radians
+    #         time_needed = (angle / abs(angular_speed*2))
+
+    #     twist = Twist()
+    #     twist.linear.x = 0.0
+    #     twist.linear.y = 0.0
+    #     twist.linear.z = 0.0
+    #     twist.angular.x = 0.0
+    #     twist.angular.y = 0.0
+    #     twist.angular.z = angular_speed
+    #     self.publisher_Twist.publish(twist)
+    #     time.sleep(time_needed)
+    #     # stop rotation
+    #     twist.angular.z = 0.0
+    #     self.publisher_Twist.publish(twist)
+    #     print("Rotated 90 degrees")
+
+
+    # Rotate function using PoseStamped
 
     def rotate(self, angle):
         # rotation_matrix = tf_transformations.quaternion_matrix([self.current_orient_x, self.current_orient_y, self.current_orient_z, self.current_orient_w])
@@ -113,10 +120,7 @@ class MazeSolverNode(Node):
         # new_quaternion = tf_transformations.quaternion_from_matrix(new_rotation_matrix)
         # return new_quaternion
         angle_rad = math.radians(angle)
-
-        # Create a quaternion for the rotation
         quaternion = tf_transformations.quaternion_from_euler(0, 0, angle_rad)
-
         return quaternion
 
 
@@ -129,17 +133,7 @@ class MazeSolverNode(Node):
     #     print("I'm not breaking the loop hehe")
     #     print(self.avg_left)
     #     print(self.avg_front)
-    def send_goal(self, x, y, theta):
-        goal_msg = NavigateToPose.Goal()
-        goal_msg.pose.pose.position.x = x
-        goal_msg.pose.pose.position.y = y
-        q = quaternion_from_euler(0, 0, theta)
-        goal_msg.pose.pose.orientation = Quaternion(*q)
 
-        self._action_client.wait_for_server()
-        self._action_client.send_goal_async(goal_msg)
-    
-    
 
 
 
@@ -159,7 +153,16 @@ class MazeSolverNode(Node):
         twist = Twist()
         print("Left Turn Status : ", self.left_turn)
         print("Right Turn Status : ", self.right_turn)
-        if self.left < 1.4:
+        print("Move Forward Status : ", self.move_forward)
+        # print("Front : ", self.front)
+        # print("Left : ", self.left)
+
+
+
+
+
+        
+        if self.left < 0.9 :
             if self.front > 0.6:   
                 self.update_command_velocity(0.3,0.0)
                 self.right_turn = 0
@@ -176,7 +179,7 @@ class MazeSolverNode(Node):
                 self.right_turn = 1
                 print("FRONT & LEFT DETECTED - TURNING RIGHT")
 
-        elif self.left > 1.2 and self.left_turn == 0:
+        elif self.left_turn == 1:
                 new_quaternion = self.rotate(-90)
                 goal.pose.orientation.z = new_quaternion[2]
                 goal.pose.orientation.w = new_quaternion[3]
@@ -186,17 +189,51 @@ class MazeSolverNode(Node):
                 self.nav.goToPose(goal)     
                 print("Turning left")
                 print(self.front)
-                self.left_turn = 1
+                if(self.nav.isTaskComplete()):
+                    self.left_turn = 0
+                    self.move_forward = 1
 
-        if self.nav.isTaskComplete() and self.left_turn == 1:
+        # if self.left_turn ==1:
+        #         twist.linear.x = 0.0
+        #         twist.linear.y = 0.0
+        #         twist.linear.z = 0.0
+        #         twist.angular.x = 0.0
+        #         twist.angular.y = 0.0
+        #         twist.angular.z = 0.8
+        #         self.publisher_Twist.publish(twist)
+        #         time.sleep(1)
+        #         self.right_turn = 0
+        #         self.move_forward = 1            
+
+        elif self.move_forward ==1:
+            print("Left Turn Completed")
+            print("Moving Forward")
             twist.linear.x = 0.3
-            twist.linear.y = 0.0
-            twist.linear.z = 0.0
-            twist.angular.x = 0.0
-            twist.angular.y = 0.0
-            twist.angular.z = 0.0
             self.publisher_Twist.publish(twist)
-            self.left_turn = 0
+
+
+        elif self.left_turn == 1 and self.move_forward == 1:
+            self.move_forward = 0
+
+
+        if self.left > 1.5:
+            self.left_turn = 1
+
+        # elif self.move_forward == 1:
+        #     print("Left Turn Completed")
+        #     print("Moving Forward")
+
+        #     twist.linear.x = 0.3
+        #     self.left_turn = 0
+        #     self.publisher_Twist.publish(twist)
+
+        #     if self.left < 1.2:  # Adjust the threshold as needed
+        #         print("Left wall detected, stopping")
+        #         twist.linear.x = 0.0
+        #         self.move_forward = 0
+        #         self.publisher_Twist.publish(twist)
+
+            
                 # if self.left_turn == 1 and self.front > 1.2:
                 #     self.update_command_velocity(0.3,0.0)  
                 #     print("LEFT TURN COMPLETED - MOVING FORWARD")
