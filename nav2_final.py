@@ -83,69 +83,10 @@ class MazeSolverNode(Node):
         # print("Front : ", self.front)
         # print("Left : ", self.left)
         # print("Right : ", self.right)
-        
-
-
-
-    # Rotate function using Twist
-
-    # def rotate(self, angular_speed, time_needed=None):
-        
-    #     if time_needed is None:  # if time_needed is not provided, calculate it for a 90 degree turn
-    #         angle = math.pi / 2  # 90 degrees in radians
-    #         time_needed = (angle / abs(angular_speed*2))
-
-    #     twist = Twist()
-    #     twist.linear.x = 0.0
-    #     twist.linear.y = 0.0
-    #     twist.linear.z = 0.0
-    #     twist.angular.x = 0.0
-    #     twist.angular.y = 0.0
-    #     twist.angular.z = angular_speed
-    #     self.publisher_Twist.publish(twist)
-    #     time.sleep(time_needed)
-    #     # stop rotation
-    #     twist.angular.z = 0.0
-    #     self.publisher_Twist.publish(twist)
-    #     print("Rotated 90 degrees")
-
-
-    # Rotate function using PoseStamped
-
-    def rotate(self, angle):
-        # rotation_matrix = tf_transformations.quaternion_matrix([self.current_orient_x, self.current_orient_y, self.current_orient_z, self.current_orient_w])
-        # turn_angle = math.radians(angle)
-        # turn_matrix = tf_transformations.rotation_matrix(turn_angle, [0, 0, 1])
-        # new_rotation_matrix = np.dot(turn_matrix, rotation_matrix)
-        # new_quaternion = tf_transformations.quaternion_from_matrix(new_rotation_matrix)
-        # return new_quaternion
-        angle_rad = math.radians(angle)
-        quaternion = tf_transformations.quaternion_from_euler(0, 0, angle_rad)
-        return quaternion
-
-
-    # def rotate_left_then_move_forward(self,angular_speed, duration):
-    #     self.rotate(angular_speed, duration)
-    #     print("Rotating rn")
-    #     time.sleep(duration)
-    #     self.update_command_velocity(0.2,0.0)
-    #     time.sleep(3)
-    #     print("I'm not breaking the loop hehe")
-    #     print(self.avg_left)
-    #     print(self.avg_front)
-
-
-
-
-    def update_command_velocity(self, linear, angular):
-        twist = Twist()
-        twist.linear.x = linear
-        twist.angular.z = angular
-        self.publisher_Twist.publish(twist)
-
-
+    
 
     def navigate(self):
+        twist = Twist()
 
         goal = PoseStamped()
         goal.header.frame_id = 'map'
@@ -154,20 +95,17 @@ class MazeSolverNode(Node):
         print("Left Turn Status : ", self.left_turn)
         print("Right Turn Status : ", self.right_turn)
         print("Move Forward Status : ", self.move_forward)
-        # print("Front : ", self.front)
-        # print("Left : ", self.left)
-
-
-
-
 
         
         if self.left < 0.9 :
-            if self.front > 0.6:   
-                self.update_command_velocity(0.3,0.0)
+            if self.front > 0.8:   
+                twist.linear.x = 0.3
+                twist.angular.z = 0.0
+                self.publisher_Twist.publish(twist)
                 self.right_turn = 0
                 print("LEFT DETECTED - MOVING FORWARD")
-            elif self.front <0.6 and self.right_turn == 0:
+
+            elif self.front <0.8 and self.right_turn == 0:
                 twist.linear.x = 0.0
                 twist.linear.y = 0.0
                 twist.linear.z = 0.0
@@ -180,7 +118,8 @@ class MazeSolverNode(Node):
                 print("FRONT & LEFT DETECTED - TURNING RIGHT")
 
         elif self.left_turn == 1:
-                new_quaternion = self.rotate(-90)
+                angle_rad = math.radians(-90)
+                new_quaternion = tf_transformations.quaternion_from_euler(0, 0, angle_rad)
                 goal.pose.orientation.z = new_quaternion[2]
                 goal.pose.orientation.w = new_quaternion[3]
                 goal.pose.position.x = self.current_x
@@ -192,18 +131,7 @@ class MazeSolverNode(Node):
                 if(self.nav.isTaskComplete()):
                     self.left_turn = 0
                     self.move_forward = 1
-
-        # if self.left_turn ==1:
-        #         twist.linear.x = 0.0
-        #         twist.linear.y = 0.0
-        #         twist.linear.z = 0.0
-        #         twist.angular.x = 0.0
-        #         twist.angular.y = 0.0
-        #         twist.angular.z = 0.8
-        #         self.publisher_Twist.publish(twist)
-        #         time.sleep(1)
-        #         self.right_turn = 0
-        #         self.move_forward = 1            
+                         
 
         elif self.move_forward ==1:
             print("Left Turn Completed")
@@ -218,133 +146,6 @@ class MazeSolverNode(Node):
 
         if self.left > 1.5:
             self.left_turn = 1
-
-        # elif self.move_forward == 1:
-        #     print("Left Turn Completed")
-        #     print("Moving Forward")
-
-        #     twist.linear.x = 0.3
-        #     self.left_turn = 0
-        #     self.publisher_Twist.publish(twist)
-
-        #     if self.left < 1.2:  # Adjust the threshold as needed
-        #         print("Left wall detected, stopping")
-        #         twist.linear.x = 0.0
-        #         self.move_forward = 0
-        #         self.publisher_Twist.publish(twist)
-
-            
-                # if self.left_turn == 1 and self.front > 1.2:
-                #     self.update_command_velocity(0.3,0.0)  
-                #     print("LEFT TURN COMPLETED - MOVING FORWARD")
-                #     self.left_turn = 0
-
-                    
-                # elif self.left_turn == 0:
-                #         print(self.left)
-                #         twist.linear.x = 0.0
-                #         twist.linear.y = 0.0
-                #         twist.linear.z = 0.0
-                #         twist.angular.x = 0.0
-                #         twist.angular.y = 0.0
-                #         twist.angular.z = 0.8
-                #         self.publisher_Twist.publish(twist)
-                #         time.sleep(0.5)
-                #         self.left_turn = 1
-                #         print("LEFT NOT DETECTED - TURNING LEFT")
-
-
-
-    
-
-        #Self.left turn is not updating to 0 
-
-
-
-
-
-
-        
-
-        #check if there's a wall to the left
-            # - No : Turn left
-            # - Yes : Check if wall infront
-            #       - Yes : Turn right
-            #       - No : Move forward
-
-        # print("Left: ", self.avg_left)
-        # print("Front: ", self.avg_front)
-
-        # if self.avg_left < 0.9:
-        #     if self.avg_front > 0.6:   
-        #         self.update_command_velocity(0.2,0.0)
-        #         print("LEFT DETECTED - MOVING FORWARD")
-        #     else:
-                
-        #         self.rotate(-0.2)
-                
-        #         print("FRONT & LEFT DETECTED - TURNING RIGHT")
-
-        # elif self.avg_left > 0.9 and self.left_turn == 0:
-        #     self.rotate(0.2)
-        #     print("LEFT NOT DETECTED - TURNING LEFT")
-
-        # #Self.left turn is not updating to 0 
-
-
-        # if self.avg_front > 0.6 and self.left_turn == 1:
-        #     self.update_command_velocity(0.2,0.0)
-        #     print("LEFT NOT DETECTED - MOVING FORWARD")
-        #     self.left_turn = 0
-
-
-
-        # if self.maze_completed == False:
-
-        #     #Checks if there's a wall to the left
-        #     if self.avg_left < 0.9 and self.current_10oclock < 0.6:
-        #         #Checks if infront has anything
-        #         if self.avg_front > 0.5 :
-        #             self.update_command_velocity(0.2,0.0)
-        #             print("LEFT DETECTED - MOVING FORWARD")
-
-
-        #         elif self.avg_front < 0.5 :
-        #             self.rotate(-0.2)
-        #             #self.rotate(-0.2,2.0)
-        #             print("LEFT & FRONT DETECTED - TURNING RIGHT")
-
-        #         print(self.avg_left)
-
-        #     elif self.avg_left > 0.6:
-        #         self.rotate(0.4,2.0)
-        #         print("Rotating first Pass")
-        #         self.rotate(0.4,2.0)
-        #         print("Rotating second Pass")
-        #         self.left_turn = True
-        #         print(self.left_turn)
-        #         self.update_command_velocity(0.0,0.0)
-        #         print("Stopped")
-
-
-        #         if self.left_turn == True and self.avg_left > 0.6:
-        #             self.update_command_velocity(0.2,0.0)
-        #             print("Moving fast")
-        #             time.sleep(3)
-        #             self.update_command_velocity(0.0,0.0)
-        #             print("Stopped")
-        #             self.left_turn = False
-                    
-
-        #     if (self.avg_front <0.5):
-        #         self.update_command_velocity(0.0,0.0)
-        #         print("Stopped")
-
-        #     if(self.avg_front > 3 and self.avg_left > 3 and self.avg_right > 3 and self.avg_back > 2):
-        #         self.maze_completed = True
-        #         print("Maze Completed")
-        #         self.update_command_velocity(0.0,0.0)
-    
 
                 
 
