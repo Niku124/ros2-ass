@@ -126,12 +126,14 @@ class MazeSolverNode(Node):
                 self.right_turn = 1
                 print("FRONT & LEFT DETECTED - TURNING RIGHT")
 
+
+        #Checks if the left turn flag is up and its not turning, so it will turn left
         elif self.left_turn == 1 and not self.is_turning:
-                print(self.left                )
+        
+                #Calcualtions to get the Quaternion values for rotation
                 current_orientation = [self.current_orient_x, self.current_orient_y, self.current_orient_z, self.current_orient_w]
                 roll, pitch, yaw = euler_from_quaternion(current_orientation)
                 yaw += math.radians(103)
-
                 if yaw < -math.pi:
                     yaw += 2 * math.pi
                 elif yaw > math.pi:
@@ -147,27 +149,29 @@ class MazeSolverNode(Node):
                 print(goal.pose.orientation.z,goal.pose.orientation.w)     
                 print("Turning left")
 
+        #Checks if it has turned left, then it moves forward 
         elif(self.left_turn == 1 and self.is_turning == True and self.nav.isTaskComplete()):
             self.left_turn = 0
             self.move_forward = 1
             self.is_turning = False
-            print("FUCK LA WTF FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFff")
+            print("WTFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFff")
                          
-
+        #Move forward
         elif self.move_forward ==1:
-            print("Left Turn Completed")
-            print("Moving Forward")
+            print("Left Turn Completed - Moving Forward")
             twist.linear.x = 0.3
             self.publisher_Twist.publish(twist)
 
 
+        #Checks if it has turned left and has moved forward
         elif self.left_turn == 1 and self.move_forward == 1:
             self.move_forward = 0
-            print("I'm fucking things uppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp")
+            print("I'm messing things uppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp")
 
-
+        #Checks if the left side is not detected and its currently not turning, it will make it turn left
         if self.left > 1.6 and not self.is_turning:
             self.left_turn = 1
+            
             print("HUHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH")
 
                 
