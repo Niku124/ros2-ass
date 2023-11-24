@@ -41,8 +41,6 @@ class MazeSolverNode(Node):
         self.left = 0
         self.right = 0
 
-
-
         self.current_x = 0
         self.current_y = 0
         self.current_z = 0
@@ -53,6 +51,8 @@ class MazeSolverNode(Node):
         self.left_turn = 0
         self.right_turn = 0
         self.move_forward = 0
+
+        self.is_turning = False
 
     def odom_callback(self, msg):
         self.current_x = msg.pose.pose.position.x
@@ -98,39 +98,60 @@ class MazeSolverNode(Node):
 
         
         if self.left < 0.9 :
-            if self.front > 0.8:   
+            if self.front > 0.7:   
                 twist.linear.x = 0.3
                 twist.angular.z = 0.0
                 self.publisher_Twist.publish(twist)
                 self.right_turn = 0
                 print("LEFT DETECTED - MOVING FORWARD")
 
-            elif self.front <0.8 and self.right_turn == 0:
-                twist.linear.x = 0.0
-                twist.linear.y = 0.0
-                twist.linear.z = 0.0
-                twist.angular.x = 0.0
-                twist.angular.y = 0.0
-                twist.angular.z = -0.8
-                self.publisher_Twist.publish(twist)
-                time.sleep(1)
+            elif self.front <0.7 and self.right_turn == 0:
+                # Get the robot's current orientation in radians
+                current_orient_rad = math.atan2(2.0 * (self.current_orient_w * self.current_orient_z + self.current_orient_x * self.current_orient_y), 
+                                                1.0 - 2.0 * (self.current_orient_y * self.current_orient_y + self.current_orient_z * self.current_orient_z))
+                # Calculate the new orientation for the right turn
+                new_orient_rad = current_orient_rad - math.radians(103)
+                # Calculate the quaternion from the new orientation
+                quaternion = tf_transformations.quaternion_from_euler(0, 0, new_orient_rad)
+
+                # Set goal.pose.orientation.z and goal.pose.orientation.w with the new quaternion
+                goal.pose.orientation.z = quaternion[2]
+                goal.pose.orientation.w = quaternion[3]
+                goal.pose.position.x = self.current_x
+                goal.pose.position.y = self.current_y
+                goal.pose.position.z = self.current_z
+                self.nav.goToPose(goal)     
+                print(goal.pose.orientation.z)
+                print("Turning left")
                 self.right_turn = 1
                 print("FRONT & LEFT DETECTED - TURNING RIGHT")
 
-        elif self.left_turn == 1:
-                angle_rad = math.radians(-90)
-                new_quaternion = tf_transformations.quaternion_from_euler(0, 0, angle_rad)
+        elif self.left_turn == 1 and not self.is_turning:
+                print(self.left                )
+                current_orientation = [self.current_orient_x, self.current_orient_y, self.current_orient_z, self.current_orient_w]
+                roll, pitch, yaw = euler_from_quaternion(current_orientation)
+                yaw += math.radians(103)
+
+                if yaw < -math.pi:
+                    yaw += 2 * math.pi
+                elif yaw > math.pi:
+                    yaw -= 2 * math.pi
+                new_quaternion = quaternion_from_euler(roll, pitch, yaw)
                 goal.pose.orientation.z = new_quaternion[2]
                 goal.pose.orientation.w = new_quaternion[3]
                 goal.pose.position.x = self.current_x
                 goal.pose.position.y = self.current_y
                 goal.pose.position.z = self.current_z
-                self.nav.goToPose(goal)     
+                self.is_turning = True
+                self.nav.goToPose(goal)
+                print(goal.pose.orientation.z,goal.pose.orientation.w)     
                 print("Turning left")
-                print(self.front)
-                if(self.nav.isTaskComplete()):
-                    self.left_turn = 0
-                    self.move_forward = 1
+
+        elif(self.left_turn == 1 and self.is_turning == True and self.nav.isTaskComplete()):
+            self.left_turn = 0
+            self.move_forward = 1
+            self.is_turning = False
+            print("FUCK LA WTF FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFff")
                          
 
         elif self.move_forward ==1:
@@ -142,10 +163,12 @@ class MazeSolverNode(Node):
 
         elif self.left_turn == 1 and self.move_forward == 1:
             self.move_forward = 0
+            print("I'm fucking things uppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp")
 
 
-        if self.left > 1.5:
+        if self.left > 1.6 and not self.is_turning:
             self.left_turn = 1
+            print("HUHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH")
 
                 
 
