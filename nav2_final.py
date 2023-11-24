@@ -22,6 +22,13 @@ from tf_transformations import euler_from_quaternion, quaternion_from_euler
 
 class MazeSolverNode(Node):
     def __init__(self):
+        
+        # A bunch of initializations stuff
+        # Subscribed to Odom to check the current position of the robot
+        # Subscribed to Laser to check the distance from the walls
+        # Publisher for to send Twist commmands to the robot
+        # Action Client to use Nav2
+
         super().__init__('maze_solver_node')
         self.odom_subscription = self.create_subscription(Odometry, 'odom', self.odom_callback, 10)
         self.subscription = self.create_subscription(LaserScan, 'scan', self.laser_callback, 10)
@@ -29,8 +36,10 @@ class MazeSolverNode(Node):
         self.publisher_Pose = self.create_publisher(PoseStamped, 'move_base_simple/goal', 10)
         self._action_client = ActionClient(self, NavigateToPose, 'NavigateToPose')
 
-
+        #Creates a BasicNavigator object to use Nav2
         self.nav = BasicNavigator()
+
+        #Initializes all the variables, some of them are unused but i'm too lazy to remove them
         self.current_pose = None
         self.avg_front = 0
         self.avg_back = 0
@@ -54,6 +63,9 @@ class MazeSolverNode(Node):
 
         self.is_turning = False
 
+
+    #This is the odom callback function
+    #Assigning the current position of the robot to the variables declared above
     def odom_callback(self, msg):
         self.current_x = msg.pose.pose.position.x
         self.current_y = msg.pose.pose.position.y
@@ -64,6 +76,9 @@ class MazeSolverNode(Node):
         self.current_orient_w = msg.pose.pose.orientation.w
 
 
+
+    #This is the laser callback function
+    # So basically i'm parsing the laser data into 12 sections to map the clockwise direction
     def laser_callback(self, msg):
         ranges = msg.ranges
         num_ranges = len(ranges)
@@ -80,24 +95,25 @@ class MazeSolverNode(Node):
         self.right = np.mean(sections[8] + sections[9] + sections[10])
         self.left = np.mean(sections[2] + sections[3] + sections[4])
         self.front = np.mean(sections[0] + sections[1] + sections[11])
-        # print("Front : ", self.front)
-        # print("Left : ", self.left)
-        # print("Right : ", self.right)
+
     
 
     def navigate(self):
+        
         twist = Twist()
-
         goal = PoseStamped()
         goal.header.frame_id = 'map'
         goal.header.stamp = self.nav.get_clock().now().to_msg()
-        twist = Twist()
+
         print("Left Turn Status : ", self.left_turn)
         print("Right Turn Status : ", self.right_turn)
         print("Move Forward Status : ", self.move_forward)
 
-        
+        #Check for the left wall first
         if self.left < 0.9 :
+
+            #Left wall detected, now checking the front to see if there's a wall
+            #Expected Behaviour : Move Forward
             if self.front > 0.7:   
                 twist.linear.x = 0.3
                 twist.angular.z = 0.0
@@ -105,10 +121,12 @@ class MazeSolverNode(Node):
                 self.right_turn = 0
                 print("LEFT DETECTED - MOVING FORWARD")
 
+            #Left wall detected, Front wall also detected and right_turn flag is 0
+            #Expected Behaviour : Turn Right
             elif self.front <0.7 and self.right_turn == 0:
+
                 # Get the robot's current orientation in radians
-                current_orient_rad = math.atan2(2.0 * (self.current_orient_w * self.current_orient_z + self.current_orient_x * self.current_orient_y), 
-                                                1.0 - 2.0 * (self.current_orient_y * self.current_orient_y + self.current_orient_z * self.current_orient_z))
+                current_orient_rad = math.atan2(2.0 * (self.current_orient_w * self.current_orient_z + self.current_orient_x * self.current_orient_y),1.0 - 2.0 * (self.current_orient_y * self.current_orient_y + self.current_orient_z * self.current_orient_z))
                 # Calculate the new orientation for the right turn
                 new_orient_rad = current_orient_rad - math.radians(103)
                 # Calculate the quaternion from the new orientation
@@ -127,7 +145,8 @@ class MazeSolverNode(Node):
                 print("FRONT & LEFT DETECTED - TURNING RIGHT")
 
 
-        #Checks if the left turn flag is up and its not turning, so it will turn left
+        #Checks if the left turn flag is up and its not turning
+        #Expected Behaviour : Turn Left
         elif self.left_turn == 1 and not self.is_turning:
         
                 #Calcualtions to get the Quaternion values for rotation
