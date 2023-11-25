@@ -41,28 +41,30 @@ class MazeSolverNode(Node):
 
         #Initializes all the variables, some of them are unused but i'm too lazy to remove them
         self.current_pose = None
-        self.avg_front = 0
-        self.avg_back = 0
-        self.avg_left = 0
-        self.avg_right = 0
+        self.immediate_front = 0.0
+        self.immediate_back = 0.0
+        self.immediate_left = 0.0
+        self.immediate_right = 0.0
 
-        self.front = 0
-        self.left = 0
-        self.right = 0
+        self.front = 0.0
+        self.left = 0.0
+        self.right = 0.0
 
-        self.current_x = 0
-        self.current_y = 0
-        self.current_z = 0
-        self.current_orient_x = 0
-        self.current_orient_y = 0
-        self.current_orient_z = 0
-        self.current_orient_w = 0
+        self.current_x = 0.0
+        self.current_y = 0.0
+        self.current_z = 0.0
+        self.current_orient_x = 0.0
+        self.current_orient_y = 0.0
+        self.current_orient_z = 0.0
+        self.current_orient_w = 0.0
         self.left_turn = 0
         self.right_turn = 0
         self.move_forward = 0
 
         self.is_turning = False
 
+        self.move_forward_counter = 0
+        
 
     #This is the odom callback function
     #Assigning the current position of the robot to the variables declared above
@@ -84,14 +86,16 @@ class MazeSolverNode(Node):
         num_ranges = len(ranges)
         section = num_ranges // 12
         sections = [ranges[i * section:(i + 1) * section] for i in range(12)]
-        self.avg_right = np.mean(sections[9])
-        self.avg_left = np.mean(sections[3])
-        self.avg_front = np.mean(sections[0])
-        self.avg_back = np.mean(sections[6])
+
+        self.immediate_right = np.mean(sections[9])
+        self.immediate_left = np.mean(sections[3])
+        self.immediate_front = np.mean(sections[0])
+        self.immediate_back = np.mean(sections[6])
 
         self.current_2oclock = np.mean(sections[11])
         self.current_10oclock = np.mean(sections[2])
 
+        #Total average of the 3 sections in each direction
         self.right = np.mean(sections[8] + sections[9] + sections[10])
         self.left = np.mean(sections[2] + sections[3] + sections[4])
         self.front = np.mean(sections[0] + sections[1] + sections[11])
@@ -109,8 +113,14 @@ class MazeSolverNode(Node):
         print("Right Turn Status : ", self.right_turn)
         print("Move Forward Status : ", self.move_forward)
 
+
+        print("Left : ", self.left)
+        print("Average Left : ", self.immediate_left)
+
+
         #Check for the left wall first
         if self.left < 0.9 :
+            self.left_wall_detected = True
 
             #Left wall detected, now checking the front to see if there's a wall
             #Expected Behaviour : Move Forward
@@ -119,6 +129,7 @@ class MazeSolverNode(Node):
                 twist.angular.z = 0.0
                 self.publisher_Twist.publish(twist)
                 self.right_turn = 0
+                self.move_forward = 1
                 print("LEFT DETECTED - MOVING FORWARD")
 
             #Left wall detected, Front wall also detected and right_turn flag is 0
@@ -147,7 +158,7 @@ class MazeSolverNode(Node):
 
         #Checks if the left turn flag is up and its not turning
         #Expected Behaviour : Turn Left
-        elif self.left_turn == 1 and not self.is_turning:
+        elif self.left_turn == 1 and not self.is_turning and self.left:
         
                 #Calcualtions to get the Quaternion values for rotation
                 current_orientation = [self.current_orient_x, self.current_orient_y, self.current_orient_z, self.current_orient_w]
@@ -175,7 +186,8 @@ class MazeSolverNode(Node):
             self.is_turning = False
             print("WTFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFff")
                          
-        #Move forward
+        #Move forward Function
+        #Publishes Twist commands to move forward
         elif self.move_forward ==1:
             print("Left Turn Completed - Moving Forward")
             twist.linear.x = 0.3
@@ -183,16 +195,39 @@ class MazeSolverNode(Node):
 
 
         #Checks if it has turned left and has moved forward
+        #Expected Behaviour : set move_flag to 0 
         elif self.left_turn == 1 and self.move_forward == 1:
             self.move_forward = 0
             print("I'm messing things uppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp")
 
-        #Checks if the left side is not detected and its currently not turning, it will make it turn left
-        if self.left > 1.6 and not self.is_turning:
+
+        #Checks if the left side is not detected and its currently not turning
+        #Expected Behaviour : Left_Turn flag up
+
+        #This is the function that messes things up, play around with the self.left detection value
+        if self.left > 1.6 and self.is_turning == False:
             self.left_turn = 1
-            
             print("HUHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH")
 
+                # In your main loop
+        if self.move_forward == 1 and:
+            self.move_forward_counter += 1
+        else:
+            self.move_forward_counter = 0
+
+
+        if self.move_forward_counter > 5:
+            self.move_forward = 0
+            self.move_forward_counter = 0
+            twist.linear.x = 0.0
+            self.publisher_Twist.publish(twist)
+            self.left_turn = 1
+            print("Move forward reset")
+
+        print(f"Move forward counter: {self.move_forward_counter}")
+
+        if(self.front > 0.7):
+            self.move_forward = 1
                 
 
 def main(args=None):
