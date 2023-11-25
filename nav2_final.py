@@ -2,7 +2,6 @@
 import rclpy
 import numpy as np
 import math
-import time
 import tf_transformations
 from rclpy.node import Node
 from rclpy.action import ActionClient
@@ -39,8 +38,7 @@ class MazeSolverNode(Node):
         #Creates a BasicNavigator object to use Nav2
         self.nav = BasicNavigator()
 
-        #Initializes all the variables, some of them are unused but i'm too lazy to remove them
-        self.current_pose = None
+        #Variables to store the sensor data from the laser
         self.immediate_front = 0.0
         self.immediate_back = 0.0
         self.immediate_left = 0.0
@@ -50,6 +48,7 @@ class MazeSolverNode(Node):
         self.left = 0.0
         self.right = 0.0
 
+        #Variables to store the current position of the robot
         self.current_x = 0.0
         self.current_y = 0.0
         self.current_z = 0.0
@@ -57,6 +56,8 @@ class MazeSolverNode(Node):
         self.current_orient_y = 0.0
         self.current_orient_z = 0.0
         self.current_orient_w = 0.0
+
+        #Flags to check if the robot is turning or moving forward
         self.left_turn = 0
         self.right_turn = 0
         self.move_forward = 0
@@ -93,7 +94,10 @@ class MazeSolverNode(Node):
         self.immediate_back = np.mean(sections[6])
 
         self.current_2oclock = np.mean(sections[11])
+
+    
         self.current_10oclock = np.mean(sections[2])
+        self.current_11oclock = np.mean(sections[1])
 
         #Total average of the 3 sections in each direction
         self.right = np.mean(sections[8] + sections[9] + sections[10])
@@ -101,27 +105,32 @@ class MazeSolverNode(Node):
         self.front = np.mean(sections[0] + sections[1] + sections[11])
 
     
+        #print("10 o clockaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" ,self.current_10oclock)
+        # print("11 o clokkkkkkkkkkkkkkkkkkkkkk",self.current_11oclock)    
+
 
     def navigate(self):
         
+        #Initializing the Twist and PoseStamped objects and their metadata
         twist = Twist()
         goal = PoseStamped()
         goal.header.frame_id = 'map'
         goal.header.stamp = self.nav.get_clock().now().to_msg()
 
+
         print("Left Turn Status : ", self.left_turn)
         print("Right Turn Status : ", self.right_turn)
         print("Move Forward Status : ", self.move_forward)
 
-
         print("Left : ", self.left)
-        print("Average Left : ", self.immediate_left)
+        print("Immediate Left : ", self.immediate_left)
 
+
+        print(self.move_forward_counter)
 
         #Check for the left wall first
-        if self.left < 0.9 :
-            self.left_wall_detected = True
-
+        if self.left < 1.0 :
+            
             #Left wall detected, now checking the front to see if there's a wall
             #Expected Behaviour : Move Forward
             if self.front > 0.7:   
@@ -153,12 +162,14 @@ class MazeSolverNode(Node):
                 print(goal.pose.orientation.z)
                 print("Turning left")
                 self.right_turn = 1
+                self.move_forward = 0
                 print("FRONT & LEFT DETECTED - TURNING RIGHT")
 
 
         #Checks if the left turn flag is up and its not turning
+        #self.is_turning is to prevent the robot from spamming the goToPose function
         #Expected Behaviour : Turn Left
-        elif self.left_turn == 1 and not self.is_turning and self.left:
+        elif self.left_turn == 1 and not self.is_turning:
         
                 #Calcualtions to get the Quaternion values for rotation
                 current_orientation = [self.current_orient_x, self.current_orient_y, self.current_orient_z, self.current_orient_w]
@@ -176,58 +187,94 @@ class MazeSolverNode(Node):
                 goal.pose.position.z = self.current_z
                 self.is_turning = True
                 self.nav.goToPose(goal)
-                print(goal.pose.orientation.z,goal.pose.orientation.w)     
+                self.move_forward = 0
+
+                print("MOVING TO ------------------------ ",goal.pose.orientation.z,goal.pose.orientation.w)     
                 print("Turning left")
 
+
         #Checks if it has turned left, then it moves forward 
-        elif(self.left_turn == 1 and self.is_turning == True and self.nav.isTaskComplete()):
+        #Shifted out to be an elif statement because this function won't be executed if its uses an if statement
+        if(self.left_turn == 1 and self.is_turning == True and self.nav.isTaskComplete() ):
             self.left_turn = 0
+            self.move_forward_counter = 5
             self.move_forward = 1
             self.is_turning = False
-            print("WTFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFff")
-                         
+            print("WTFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+
+        elif((self.front < 0.6 or self.left <1.5) and self.move_forward_counter > 0 ):
+            self.left_turn = 0
+            self.move_forward_counter = 0
+            print("STOPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP")
+
+
+
+
+
         #Move forward Function
         #Publishes Twist commands to move forward
-        elif self.move_forward ==1:
+        if self.move_forward ==1:
             print("Left Turn Completed - Moving Forward")
             twist.linear.x = 0.3
             self.publisher_Twist.publish(twist)
 
+            if self.move_forward_counter >0:
+                self.move_forward_counter -= 1
+            else:
+                self.move_forward_counter = 0
+                self.move_forward = 0
 
-        #Checks if it has turned left and has moved forward
-        #Expected Behaviour : set move_flag to 0 
-        elif self.left_turn == 1 and self.move_forward == 1:
-            self.move_forward = 0
-            print("I'm messing things uppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp")
 
 
-        #Checks if the left side is not detected and its currently not turning
-        #Expected Behaviour : Left_Turn flag up
+
+        # #Checks if it has turned left, then it moves forward 
+        # #Shifted out to be an elif statement because this function won't be executed if its uses an if statement
+        # elif(self.left_turn == 1 and self.is_turning == True and self.nav.isTaskComplete() ):
+        #     self.left_turn = 0
+        #     self.move_forward = 1
+        #     self.is_turning = False
+        #     print("WTFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+                        
+
+        # #Checks if the left side is not detected and its currently not turning
+        # #Expected Behaviour : Left_Turn flag up
 
         #This is the function that messes things up, play around with the self.left detection value
-        if self.left > 1.6 and self.is_turning == False:
+        # if self.left > 1.6 and self.immediate_left > 1.6 and self.is_turning == False :
+        #     self.left_turn = 1
+        #     print("HUHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH")
+
+        if((self.left - self.immediate_left)> 0.3 and self.nav.isTaskComplete() and self.move_forward_counter == 0):
             self.left_turn = 1
-            print("HUHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH")
-
-                # In your main loop
-        if self.move_forward == 1 and:
-            self.move_forward_counter += 1
-        else:
-            self.move_forward_counter = 0
-
-
-        if self.move_forward_counter > 5:
             self.move_forward = 0
-            self.move_forward_counter = 0
+            print("Please work")
+        if(self.left and self.current_11oclock and self.immediate_left > 1.6 and self.nav.isTaskComplete() and self.move_forward_counter == 0):
+            self.left_turn = 1
+            self.move_forward = 0
             twist.linear.x = 0.0
             self.publisher_Twist.publish(twist)
-            self.left_turn = 1
-            print("Move forward reset")
+            print("Please workkkkkkkkkkkkkkkkkk")
 
-        print(f"Move forward counter: {self.move_forward_counter}")
 
-        if(self.front > 0.7):
-            self.move_forward = 1
+
+
+        # if self.move_forward == 1:
+        #     self.move_forward_counter += 1
+        # else:
+        #     self.move_forward_counter = 0
+
+
+        # if self.move_forward_counter > 5:
+        #     self.move_forward = 0
+        #     self.move_forward_counter = 0
+        #     twist.linear.x = 0.0
+        #     self.publisher_Twist.publish(twist)
+        #     print("Move forward reset")
+
+        # print(f"Move forward counter:                                        {self.move_forward_counter}")
+
+        # if(self.front > 0.7):
+        #     self.move_forward = 1
                 
 
 def main(args=None):
