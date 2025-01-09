@@ -11,3 +11,7 @@ chmod +x nav2_final.py
 ^^^^^^^^^^^^^^^
 Commands needed to run the script
 make sure the terminal is in the same location as the python script
+
+
+bored in intern
+i was here
